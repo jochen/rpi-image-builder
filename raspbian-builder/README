@@ -1,0 +1,5 @@
+
+
+docker run --rm --privileged -ti -v /var/run/docker.sock:/var/run/docker.sock qemuarm
+
+

@@ -1,0 +1,13 @@
+using docker to create my own raspbian images
+(this example just enable ssh)
+
+make targets
+
+build-rpi-builder: build the image with qemu stuff to build the raspbian creater
+
+build-rpi-docker-img: run the container with qemu and build the basic raspbian image
+
+build-rpi-creater: build sdcard creater image from the raspbian image
+
+create-rpi-img: run sdcard image creation
+

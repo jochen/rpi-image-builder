@@ -1,0 +1,105 @@
+#!/bin/bash
+
+test -d /buildenv || exit 1
+
+apt-get update
+apt-get upgrade
+
+today=`date +%Y%m%d`
+
+bootsize="$(ls -s --block-size=1048576 /boot/boot.bin | cut -d' ' -f1)"
+echo "bootsize $bootsize"
+deb_release="$(lsb_release -cs)"
+
+image="/buildenv/raspbian_basic_${deb_release}_${today}.img"
+
+rootfs="/tmp/rootfs"
+
+dd if=/dev/zero of=${image} bs=1MB count=3800
+
+fdisk ${image} << EOF
+n
+p
+1
+
++${bootsize}M
+t
+c
+n
+p
+2
+
+
+w
+EOF
+
+device=`losetup -f --show ${image}`
+
+dd if=/boot/mbr.bin of=${device} bs=446 count=1
+
+partition=$(kpartx -va ${device} | sed -E 's/.* (loop[0-9]*)p.*/\1/g' | head -1)
+
+bootp=/dev/mapper/${partition}p1
+rootp=/dev/mapper/${partition}p2
+
+test -b ${rootp} || exit 1
+test -b ${bootp} || exit 1
+
+dd if=/boot/boot.bin of=${bootp}
+
+
+mkfs.ext4 ${rootp}
+
+mkdir -p ${rootfs}
+
+mount ${rootp} ${rootfs}
+mkdir -p ${rootfs}/tmp
+
+rsync -ax --exclude=/tmp --exclude=/buildenv / ${rootfs}/
+
+mv ${rootfs}/etc/ld.so.preload.bak ${rootfs}/etc/ld.so.preload
+
+rm -v ${rootfs}/boot/*
+mount ${bootp} ${rootfs}/boot
+touch ${rootfs}/boot/ssh
+umount -l ${bootp}
+
+sync
+
+umount -l ${rootfs}
+
+e2fsck -f ${rootp}
+BLOCKSIZE=$(tune2fs -l ${rootp} | sed -ne '/Block size/s/.*: *//p')
+echo "BLOCKSIZE '$BLOCKSIZE'"
+MINSIZE=$(resize2fs -P ${rootp} | sed '/minimum size/s/.*filesystem: //')
+echo "MINSIZE '$MINSIZE'"
+TARGETSIZE=$[ ($MINSIZE * $BLOCKSIZE + 10240 * 1024 ) / $BLOCKSIZE ]
+echo "TARGETSIZE '$TARGETSIZE'"
+TARGETSECTORS=$[ ($MINSIZE * $BLOCKSIZE + 10240 * 1024 ) / 512 + 1 ]
+echo "TARGETSECTORS '$TARGETSECTORS'"
+
+resize2fs ${rootp} $TARGETSIZE
+
+sync
+
+kpartx -vd ${device}
+
+fdisk ${image} << EOF
+d 2
+2
+n
+p
+2
+
++${TARGETSECTORS}
+w
+EOF
+
+losetup -vd ${device}
+
+TARGETCOUNT=$[ $TARGETSECTORS+($bootsize*1024*1024/512)+2048+1 ]
+echo "TARGETCOUNT '$TARGETCOUNT'"
+
+dd if=${image} of=${image}_ bs=512 count=$TARGETCOUNT
+mv ${image}_ ${image}
+
