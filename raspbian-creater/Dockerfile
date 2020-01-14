@@ -7,11 +7,14 @@ ENV LANG en_US.utf8
 VOLUME ["/buildenv"]
 
 COPY create-raspbian-image /usr/local/bin
+COPY prepare-boot /usr/local/bin
 
 RUN apt-get install -y rsync kpartx vim
 
 #RUN rm -rf /var/lib/apt/lists/*
 
+CMD ["/bin/bash", "/usr/local/bin/prepare-boot", "mount"]
 CMD ["/bin/bash", "/usr/local/bin/create-raspbian-image"]
+CMD ["/bin/bash", "/usr/local/bin/prepare-boot", "umount"]
 
 

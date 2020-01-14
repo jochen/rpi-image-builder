@@ -1,3 +1,6 @@
+all: build-rpi-builder build-rpi-docker-img build-rpi-creater create-rpi-img
+.PHONY: all
+
 build-rpi-builder:
 	docker build -t raspbian-builder raspbian-builder
 
@@ -12,5 +15,4 @@ create-rpi-img:
 	docker run --rm --privileged -ti raspbian-builder binfmts-enable-qemu-arm.sh
 	docker run --rm --privileged -ti -v $(shell pwd):/buildenv  raspbian-creater
 
-all: build-rpi-builder build-rpi-docker-img build-rpi-creater create-rpi-img
 

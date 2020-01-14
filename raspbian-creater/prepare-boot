@@ -1,0 +1,35 @@
+#!/bin/bash
+
+bootfs="/tmp/bootfs"
+
+command="$1"
+
+[ "${command}" == "" ] && exit 1
+
+test -d ${bootfs} || mkdir ${bootfs}
+
+if [ "${command}" == "mount" ]; then
+
+  cp /boot/*.bin ${bootfs}/
+  
+  device=$(losetup -f --show /tmp/bootfs/boot.bin)
+  
+  echo "${device}" > ${bootfs}/bootdevice
+
+  mount ${device} /boot
+  
+fi
+
+if [ "${command}" == "umount" ]; then
+
+  test -f ${bootfs}/bootdevice || exit 1
+  device=$(cat ${bootfs}/bootdevice)
+
+  mount | grep "/dev/loop.* on /boot type vfat" || exit 0
+
+  umount /boot
+  
+  losetup -d ${device}
+  
+fi
+

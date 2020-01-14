@@ -3,17 +3,16 @@
 test -d /buildenv || exit 1
 
 apt-get update
-apt-get upgrade
+apt-get upgrade -y
 
 today=`date +%Y%m%d`
-
-bootsize="$(ls -s --block-size=1048576 /boot/boot.bin | cut -d' ' -f1)"
-echo "bootsize $bootsize"
 deb_release="$(lsb_release -cs)"
-
+bootfs="/tmp/bootfs"
+rootfs="/tmp/rootfs"
 image="/buildenv/raspbian_basic_${deb_release}_${today}.img"
 
-rootfs="/tmp/rootfs"
+bootsize="$(ls -s --block-size=1048576 /${bootfs}/boot.bin | cut -d' ' -f1)"
+echo "bootsize $bootsize"
 
 dd if=/dev/zero of=${image} bs=1MB count=3800
 
@@ -35,7 +34,7 @@ EOF
 
 device=`losetup -f --show ${image}`
 
-dd if=/boot/mbr.bin of=${device} bs=446 count=1
+dd if=/${bootfs}/mbr.bin of=${device} bs=446 count=1
 
 partition=$(kpartx -va ${device} | sed -E 's/.* (loop[0-9]*)p.*/\1/g' | head -1)
 
@@ -45,8 +44,6 @@ rootp=/dev/mapper/${partition}p2
 test -b ${rootp} || exit 1
 test -b ${bootp} || exit 1
 
-dd if=/boot/boot.bin of=${bootp}
-
 
 mkfs.ext4 ${rootp}
 
@@ -55,16 +52,17 @@ mkdir -p ${rootfs}
 mount ${rootp} ${rootfs}
 mkdir -p ${rootfs}/tmp
 
-rsync -ax --exclude=/tmp --exclude=/buildenv / ${rootfs}/
+rsync -ax --exclude=/tmp --exclude=/buildenv --exclude=/boot / ${rootfs}/
 
 mv ${rootfs}/etc/ld.so.preload.bak ${rootfs}/etc/ld.so.preload
 
-rm -v ${rootfs}/boot/*
-mount ${bootp} ${rootfs}/boot
 touch ${rootfs}/boot/ssh
-umount -l ${bootp}
 
 sync
+
+/usr/local/bin/prepare-boot umount
+
+dd if=/${bootfs}/boot.bin of=${bootp}
 
 umount -l ${rootfs}
 
