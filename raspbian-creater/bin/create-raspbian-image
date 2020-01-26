@@ -11,10 +11,12 @@ bootfs="/tmp/bootfs"
 rootfs="/tmp/rootfs"
 image="/buildenv/raspbian_basic_${deb_release}_${today}.img"
 
-bootsize="$(ls -s --block-size=1048576 /${bootfs}/boot.bin | cut -d' ' -f1)"
+test -d ${bootfs} || exit 1
+
+bootsize="$(ls -s --block-size=1048576 ${bootfs}/boot.bin | cut -d' ' -f1)"
 echo "bootsize $bootsize"
 
-dd if=/dev/zero of=${image} bs=1MB count=3800
+dd if=/dev/zero of=${image} bs=1 count=0 seek=8G
 
 fdisk ${image} << EOF
 n
@@ -34,9 +36,10 @@ EOF
 
 device=`losetup -f --show ${image}`
 
-dd if=/${bootfs}/mbr.bin of=${device} bs=446 count=1
+dd if=${bootfs}/mbr.bin of=${device} bs=446 count=1
 
 partition=$(kpartx -va ${device} | sed -E 's/.* (loop[0-9]*)p.*/\1/g' | head -1)
+echo "partition ${partition}"
 
 bootp=/dev/mapper/${partition}p1
 rootp=/dev/mapper/${partition}p2
@@ -51,18 +54,23 @@ mkdir -p ${rootfs}
 
 mount ${rootp} ${rootfs}
 mkdir -p ${rootfs}/tmp
+mkdir -p ${rootfs}/boot
+
+#execute extra script
+[ -z ${EXEC_EXTRA_SCRIPT+x} ] || $EXEC_EXTRA_SCRIPT
 
 rsync -ax --exclude=/tmp --exclude=/buildenv --exclude=/boot / ${rootfs}/
 
-mv ${rootfs}/etc/ld.so.preload.bak ${rootfs}/etc/ld.so.preload
+mv -v ${rootfs}/etc/ld.so.preload.bak ${rootfs}/etc/ld.so.preload
 
-touch ${rootfs}/boot/ssh
+touch /boot/ssh
+ls -l /boot/ssh
 
 sync
 
 /usr/local/bin/prepare-boot umount
 
-dd if=/${bootfs}/boot.bin of=${bootp}
+dd if=${bootfs}/boot.bin of=${bootp}
 
 umount -l ${rootfs}
 
@@ -71,9 +79,9 @@ BLOCKSIZE=$(tune2fs -l ${rootp} | sed -ne '/Block size/s/.*: *//p')
 echo "BLOCKSIZE '$BLOCKSIZE'"
 MINSIZE=$(resize2fs -P ${rootp} | sed '/minimum size/s/.*filesystem: //')
 echo "MINSIZE '$MINSIZE'"
-TARGETSIZE=$[ ($MINSIZE * $BLOCKSIZE + 10240 * 1024 ) / $BLOCKSIZE ]
+TARGETSIZE=$[ ($MINSIZE * $BLOCKSIZE + 512 * 1024 ) / $BLOCKSIZE ]
 echo "TARGETSIZE '$TARGETSIZE'"
-TARGETSECTORS=$[ ($MINSIZE * $BLOCKSIZE + 10240 * 1024 ) / 512 + 1 ]
+TARGETSECTORS=$[ ($MINSIZE * $BLOCKSIZE + 512 * 1024 ) / 512 + 1 ]
 echo "TARGETSECTORS '$TARGETSECTORS'"
 
 resize2fs ${rootp} $TARGETSIZE

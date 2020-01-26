@@ -6,8 +6,7 @@ ENV LANG en_US.utf8
 
 VOLUME ["/buildenv"]
 
-COPY create-raspbian-image /usr/local/bin
-COPY prepare-boot /usr/local/bin
+COPY bin/ /usr/local/bin/
 
 RUN apt-get install -y rsync kpartx vim
 
